@@ -246,6 +246,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         return factory.createMediaSource(
                 new MediaItem.Builder()
                         .setTag(metadata)
+                        .setMediaMetadata(getMediaMetadata(metadata))
                         .setUri(Uri.parse(sourceUrl))
                         .setLiveConfiguration(
                                 new MediaItem.LiveConfiguration.Builder()
@@ -294,6 +295,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         return dataSource.getProgressiveMediaSourceFactory().createMediaSource(
                 new MediaItem.Builder()
                         .setTag(metadata)
+                        .setMediaMetadata(getMediaMetadata(metadata))
                         .setUri(Uri.parse(stream.getContent()))
                         .setCustomCacheKey(cacheKey)
                         .build());
@@ -310,6 +312,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
             return dataSource.getDashMediaSourceFactory().createMediaSource(
                     new MediaItem.Builder()
                             .setTag(metadata)
+                            .setMediaMetadata(getMediaMetadata(metadata))
                             .setUri(Uri.parse(stream.getContent()))
                             .setCustomCacheKey(cacheKey)
                             .build());
@@ -320,6 +323,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
                     createDashManifest(stream.getContent(), stream),
                     new MediaItem.Builder()
                             .setTag(metadata)
+                            .setMediaMetadata(getMediaMetadata(metadata))
                             .setUri(manifestUrlToUri(stream.getManifestUrl()))
                             .setCustomCacheKey(cacheKey)
                             .build());
@@ -345,6 +349,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
             return dataSource.getHlsMediaSourceFactory(null).createMediaSource(
                     new MediaItem.Builder()
                             .setTag(metadata)
+                            .setMediaMetadata(getMediaMetadata(metadata))
                             .setUri(Uri.parse(stream.getContent()))
                             .setCustomCacheKey(cacheKey)
                             .build());
@@ -357,6 +362,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         return dataSource.getHlsMediaSourceFactory(hlsDataSourceFactoryBuilder)
                 .createMediaSource(new MediaItem.Builder()
                         .setTag(metadata)
+                        .setMediaMetadata(getMediaMetadata(metadata))
                         .setUri(manifestUrlToUri(stream.getManifestUrl()))
                         .setCustomCacheKey(cacheKey)
                         .build());
@@ -372,6 +378,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
             return dataSource.getSSMediaSourceFactory().createMediaSource(
                     new MediaItem.Builder()
                             .setTag(metadata)
+                            .setMediaMetadata(getMediaMetadata(metadata))
                             .setUri(Uri.parse(stream.getContent()))
                             .setCustomCacheKey(cacheKey)
                             .build());
@@ -516,6 +523,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         return dataSource.getYoutubeDashMediaSourceFactory().createMediaSource(dashManifest,
                 new MediaItem.Builder()
                         .setTag(metadata)
+                        .setMediaMetadata(getMediaMetadata(metadata))
                         .setUri(Uri.parse(stream.getContent()))
                         .setCustomCacheKey(cacheKey)
                         .build());
@@ -529,6 +537,7 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         return dataSource.getYoutubeProgressiveMediaSourceFactory()
                 .createMediaSource(new MediaItem.Builder()
                         .setTag(metadata)
+                        .setMediaMetadata(getMediaMetadata(metadata))
                         .setUri(Uri.parse(stream.getContent()))
                         .setCustomCacheKey(cacheKey)
                         .build());
@@ -548,6 +557,18 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         } else if (url.isEmpty()) {
             throw new ResolverException("Empty stream URL");
         }
+    }
+
+    private static com.google.android.exoplayer2.MediaMetadata getMediaMetadata(
+            final MediaItemTag tag) {
+        final String thumbnailUrl = tag.getThumbnailUrl();
+        return new com.google.android.exoplayer2.MediaMetadata.Builder()
+                .setArtworkUri(thumbnailUrl == null ? null : Uri.parse(thumbnailUrl))
+                .setArtist(tag.getUploaderName())
+                .setDescription(tag.getTitle())
+                .setDisplayTitle(tag.getTitle())
+                .setTitle(tag.getTitle())
+                .build();
     }
     //endregion
 

@@ -59,6 +59,7 @@ import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
 import com.google.android.exoplayer2.ui.CaptionStyleCompat;
 import com.google.android.exoplayer2.video.VideoSize;
+import com.google.android.gms.cast.framework.CastButtonFactory;
 
 import org.schabi.newpipe.App;
 import org.schabi.newpipe.R;
@@ -191,6 +192,8 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
 
         binding.titleTextView.setSelected(true);
         binding.channelTextView.setSelected(true);
+
+        CastButtonFactory.setUpMediaRouteButton(context, binding.mediaRouteButton);
 
         // Prevent hiding of bottom sheet via swipe inside queue
         binding.itemsList.setNestedScrollingEnabled(false);
@@ -436,6 +439,7 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
         binding.playbackSpeed.setPadding(buttonsPad, buttonsPad, buttonsPad, buttonsPad);
         binding.playbackSpeed.setMinimumWidth(buttonsMinWidth);
         binding.captionTextView.setPadding(buttonsPad, buttonsPad, buttonsPad, buttonsPad);
+        binding.mediaRouteButton.setPadding(buttonsPad, buttonsPad, buttonsPad, buttonsPad);
     }
     //endregion
 
@@ -1579,13 +1583,14 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
      * be called many times and even while the UI is in unready states.
      */
     public void setupVideoSurfaceIfNeeded() {
-        if (!surfaceIsSetup && player.getExoPlayer() != null
+        if (!surfaceIsSetup && player.getLocalExoPlayer() != null
                 && binding.getRoot().getParent() != null) {
             // make sure there is nothing left over from previous calls
             clearVideoSurface();
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) { // >=API23
-                surfaceHolderCallback = new SurfaceHolderCallback(context, player.getExoPlayer());
+                surfaceHolderCallback = new SurfaceHolderCallback(context,
+                        player.getLocalExoPlayer());
                 binding.surfaceView.getHolder().addCallback(surfaceHolderCallback);
 
                 // ensure player is using an unreleased surface, which the surfaceView might not be
@@ -1593,10 +1598,11 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
                 if (binding.surfaceView.getHolder().getSurface().isValid()) {
                     // initially set the surface manually otherwise
                     // onRenderedFirstFrame() will not be called
-                    player.getExoPlayer().setVideoSurfaceHolder(binding.surfaceView.getHolder());
+                    player.getLocalExoPlayer().setVideoSurfaceHolder(
+                            binding.surfaceView.getHolder());
                 }
             } else {
-                player.getExoPlayer().setVideoSurfaceView(binding.surfaceView);
+                player.getLocalExoPlayer().setVideoSurfaceView(binding.surfaceView);
             }
 
             surfaceIsSetup = true;
@@ -1610,7 +1616,7 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
             surfaceHolderCallback.release();
             surfaceHolderCallback = null;
         }
-        Optional.ofNullable(player.getExoPlayer()).ifPresent(ExoPlayer::clearVideoSurface);
+        Optional.ofNullable(player.getLocalExoPlayer()).ifPresent(ExoPlayer::clearVideoSurface);
         surfaceIsSetup = false;
     }
     //endregion

@@ -54,6 +54,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -70,6 +71,9 @@ import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.PlaybackException;
 import com.google.android.exoplayer2.PlaybackParameters;
+import com.google.android.exoplayer2.ext.cast.CastPlayer;
+import com.google.android.exoplayer2.ext.cast.SessionAvailabilityListener;
+import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.exoplayer2.Player.PositionInfo;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.Tracks;
@@ -141,7 +145,7 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.disposables.SerialDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
-public final class Player implements PlaybackListener, Listener {
+public final class Player implements PlaybackListener, Listener, SessionAvailabilityListener {
     public static final boolean DEBUG = MainActivity.DEBUG;
     public static final String TAG = Player.class.getSimpleName();
 
@@ -206,6 +210,9 @@ public final class Player implements PlaybackListener, Listener {
     //////////////////////////////////////////////////////////////////////////*/
 
     private ExoPlayer simpleExoPlayer;
+    private CastPlayer castPlayer;
+    private com.google.android.exoplayer2.Player currentPlayer;
+    private CastContext castContext;
     private AudioReactor audioReactor;
 
     @NonNull
@@ -313,6 +320,13 @@ public final class Player implements PlaybackListener, Listener {
 
         videoResolver = new VideoPlaybackResolver(context, dataSource, getQualityResolver());
         audioResolver = new AudioPlaybackResolver(context, dataSource);
+
+        try {
+            castContext = CastContext.getSharedInstance(context);
+            castPlayer = new CastPlayer(castContext);
+        } catch (final Exception e) {
+            Log.e(TAG, "Failed to initialize CastContext", e);
+        }
 
         currentThumbnailTarget = getCurrentThumbnailTarget();
 
@@ -641,6 +655,16 @@ public final class Player implements PlaybackListener, Listener {
         simpleExoPlayer.setWakeMode(C.WAKE_MODE_NETWORK);
         simpleExoPlayer.setHandleAudioBecomingNoisy(true);
 
+        if (castPlayer != null && castPlayer.isCastSessionAvailable()) {
+            currentPlayer = castPlayer;
+        } else {
+            currentPlayer = simpleExoPlayer;
+        }
+        if (castPlayer != null) {
+            castPlayer.addListener(this);
+            castPlayer.setSessionAvailabilityListener(this);
+        }
+
         audioReactor = new AudioReactor(context, simpleExoPlayer);
 
         registerBroadcastReceiver();
@@ -669,6 +693,11 @@ public final class Player implements PlaybackListener, Listener {
             Log.d(TAG, "destroyPlayer() called");
         }
         UIs.call(PlayerUi::destroyPlayer);
+
+        if (castPlayer != null) {
+            castPlayer.removeListener(this);
+            castPlayer.setSessionAvailabilityListener(null);
+        }
 
         if (!exoPlayerIsNull()) {
             simpleExoPlayer.removeListener(this);
@@ -699,6 +728,11 @@ public final class Player implements PlaybackListener, Listener {
         stopActivityBinding();
 
         destroyPlayer();
+        if (castPlayer != null) {
+            castPlayer.release();
+            castPlayer = null;
+        }
+
         unregisterBroadcastReceiver();
 
         databaseUpdateDisposable.clear();
@@ -979,7 +1013,7 @@ public final class Player implements PlaybackListener, Listener {
         if (exoPlayerIsNull()) {
             return PlaybackParameters.DEFAULT;
         }
-        return simpleExoPlayer.getPlaybackParameters();
+        return currentPlayer.getPlaybackParameters();
     }
 
     /**
@@ -996,9 +1030,11 @@ public final class Player implements PlaybackListener, Listener {
         final float roundedPitch = Math.round(pitch * 100.0f) / 100.0f;
 
         savePlaybackParametersToPrefs(this, roundedSpeed, roundedPitch, skipSilence);
-        simpleExoPlayer.setPlaybackParameters(
+        currentPlayer.setPlaybackParameters(
                 new PlaybackParameters(roundedSpeed, roundedPitch));
-        simpleExoPlayer.setSkipSilenceEnabled(skipSilence);
+        if (currentPlayer == simpleExoPlayer) {
+            simpleExoPlayer.setSkipSilenceEnabled(skipSilence);
+        }
     }
     //endregion
 
@@ -1273,13 +1309,13 @@ public final class Player implements PlaybackListener, Listener {
 
     @RepeatMode
     public int getRepeatMode() {
-        return exoPlayerIsNull() ? REPEAT_MODE_OFF : simpleExoPlayer.getRepeatMode();
+        return exoPlayerIsNull() ? REPEAT_MODE_OFF : currentPlayer.getRepeatMode();
     }
 
     public void cycleNextRepeatMode() {
         if (!exoPlayerIsNull()) {
             @RepeatMode final int repeatMode;
-            switch (simpleExoPlayer.getRepeatMode()) {
+            switch (currentPlayer.getRepeatMode()) {
                 case REPEAT_MODE_OFF:
                     repeatMode = REPEAT_MODE_ONE;
                     break;
@@ -1291,7 +1327,7 @@ public final class Player implements PlaybackListener, Listener {
                     repeatMode = REPEAT_MODE_OFF;
                     break;
             }
-            simpleExoPlayer.setRepeatMode(repeatMode);
+            currentPlayer.setRepeatMode(repeatMode);
         }
     }
 
@@ -1326,7 +1362,7 @@ public final class Player implements PlaybackListener, Listener {
 
     public void toggleShuffleModeEnabled() {
         if (!exoPlayerIsNull()) {
-            simpleExoPlayer.setShuffleModeEnabled(!simpleExoPlayer.getShuffleModeEnabled());
+            currentPlayer.setShuffleModeEnabled(!currentPlayer.getShuffleModeEnabled());
         }
     }
     //endregion
@@ -1340,7 +1376,7 @@ public final class Player implements PlaybackListener, Listener {
 
     public void toggleMute() {
         final boolean wasMuted = isMuted();
-        simpleExoPlayer.setVolume(wasMuted ? 1 : 0);
+        currentPlayer.setVolume(wasMuted ? 1 : 0);
         if (wasMuted) {
             audioReactor.requestAudioFocus();
         } else {
@@ -1351,7 +1387,7 @@ public final class Player implements PlaybackListener, Listener {
     }
 
     public boolean isMuted() {
-        return !exoPlayerIsNull() && simpleExoPlayer.getVolume() == 0;
+        return !exoPlayerIsNull() && currentPlayer.getVolume() == 0;
     }
     //endregion
 
@@ -2073,7 +2109,7 @@ public final class Player implements PlaybackListener, Listener {
     //region Captions (text tracks)
 
     public int getCaptionRendererIndex() {
-        if (exoPlayerIsNull()) {
+        if (exoPlayerIsNull() || currentPlayer != simpleExoPlayer) {
             return RENDERER_UNAVAILABLE;
         }
 
@@ -2332,32 +2368,36 @@ public final class Player implements PlaybackListener, Listener {
     }
 
     public boolean exoPlayerIsNull() {
-        return simpleExoPlayer == null;
+        return currentPlayer == null;
     }
 
-    public ExoPlayer getExoPlayer() {
+    public com.google.android.exoplayer2.Player getExoPlayer() {
+        return currentPlayer;
+    }
+
+    public ExoPlayer getLocalExoPlayer() {
         return simpleExoPlayer;
     }
 
     public boolean isStopped() {
-        return exoPlayerIsNull() || simpleExoPlayer.getPlaybackState() == ExoPlayer.STATE_IDLE;
+        return exoPlayerIsNull() || currentPlayer.getPlaybackState() == ExoPlayer.STATE_IDLE;
     }
 
     public boolean isPlaying() {
-        return !exoPlayerIsNull() && simpleExoPlayer.isPlaying();
+        return !exoPlayerIsNull() && currentPlayer.isPlaying();
     }
 
     public boolean getPlayWhenReady() {
-        return !exoPlayerIsNull() && simpleExoPlayer.getPlayWhenReady();
+        return !exoPlayerIsNull() && currentPlayer.getPlayWhenReady();
     }
 
     public boolean isLoading() {
-        return !exoPlayerIsNull() && simpleExoPlayer.isLoading();
+        return !exoPlayerIsNull() && currentPlayer.isLoading();
     }
 
     private boolean isLive() {
         try {
-            return !exoPlayerIsNull() && simpleExoPlayer.isCurrentMediaItemDynamic();
+            return !exoPlayerIsNull() && currentPlayer.isCurrentMediaItemDynamic();
         } catch (final IndexOutOfBoundsException e) {
             // Why would this even happen =(... but lets log it anyway, better safe than sorry
             if (DEBUG) {
@@ -2465,6 +2505,9 @@ public final class Player implements PlaybackListener, Listener {
      * @return the video renderer index or {@link #RENDERER_UNAVAILABLE} if it cannot be get
      */
     private int getVideoRendererIndex() {
+        if (currentPlayer != simpleExoPlayer) {
+            return RENDERER_UNAVAILABLE;
+        }
         final MappingTrackSelector.MappedTrackInfo mappedTrackInfo = trackSelector
                 .getCurrentMappedTrackInfo();
 
@@ -2489,5 +2532,107 @@ public final class Player implements PlaybackListener, Listener {
      */
     public boolean isScreenOn() {
         return screenOn;
+    }
+
+    /*//////////////////////////////////////////////////////////////////////////
+    // Cast
+    //////////////////////////////////////////////////////////////////////////*/
+
+    @Override
+    public void onCastSessionAvailable() {
+        setCurrentPlayer(castPlayer);
+    }
+
+    @Override
+    public void onCastSessionUnavailable() {
+        setCurrentPlayer(simpleExoPlayer);
+    }
+
+    private void setCurrentPlayer(final com.google.android.exoplayer2.Player newPlayer) {
+        if (currentPlayer == newPlayer) {
+            return;
+        }
+
+        // Get state from old player
+        final boolean playWhenReady = currentPlayer.getPlayWhenReady();
+        final long currentPos = currentPlayer.getCurrentPosition();
+        final int currentWindowIndex = currentPlayer.getCurrentMediaItemIndex();
+
+        // Stop old player
+        currentPlayer.stop();
+        if (currentPlayer == simpleExoPlayer) {
+            simpleExoPlayer.clearMediaItems();
+        }
+
+        currentPlayer = newPlayer;
+
+        // Restore state to new player
+        if (newPlayer == castPlayer) {
+            loadMediaToCastPlayer(currentWindowIndex, currentPos, playWhenReady);
+        } else {
+            reloadPlayQueueManager();
+            if (simpleExoPlayer.getDuration() != C.TIME_UNSET) {
+                simpleExoPlayer.seekTo(currentWindowIndex, currentPos);
+            }
+            simpleExoPlayer.setPlayWhenReady(playWhenReady);
+
+            // Restore speed
+            setPlaybackSpeed(getPlaybackSpeed());
+        }
+
+        UIs.call(PlayerUi::initPlayer);
+    }
+
+    private void loadMediaToCastPlayer(final int windowIndex, final long positionMs,
+                                       final boolean playWhenReady) {
+        if (playQueue == null || castPlayer == null) {
+            return;
+        }
+
+        getCurrentStreamInfo().ifPresent(info -> {
+            String url = null;
+            String mimeType = null;
+
+            if (!isNullOrEmpty(info.getHlsUrl())) {
+                url = info.getHlsUrl();
+                mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_M3U8;
+            } else if (!isNullOrEmpty(info.getDashMpdUrl())) {
+                url = info.getDashMpdUrl();
+                mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_MPD;
+            } else {
+                final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
+                        context, info.getVideoStreams(), null, false, false);
+                for (final VideoStream stream : sortedStreams) {
+                    if (!stream.isVideoOnly()) {
+                        url = stream.getContent();
+                        if (stream.getFormat() != null) {
+                            mimeType = stream.getFormat().getMimeType();
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (url != null) {
+                final com.google.android.exoplayer2.MediaItem mediaItem =
+                        org.schabi.newpipe.player.mediaitem.StreamInfoTag.of(info)
+                                .asMediaItem()
+                                .buildUpon()
+                                .setUri(Uri.parse(url))
+                                .setMimeType(mimeType)
+                                .build();
+
+                castPlayer.setMediaItem(mediaItem, positionMs);
+                castPlayer.setPlayWhenReady(playWhenReady);
+                castPlayer.prepare();
+            } else {
+                ErrorUtil.createNotification(context, new ErrorInfo(
+                        new Exception("No castable stream found"),
+                        UserAction.PLAY_STREAM,
+                        "No castable stream found",
+                        info.getServiceId(),
+                        info.getUrl()));
+            }
+        });
     }
 }
