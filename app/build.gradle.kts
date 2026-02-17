@@ -238,6 +238,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.localbroadcastmanager)
     implementation(libs.androidx.media)
+    implementation(libs.androidx.mediarouter)
     implementation(libs.androidx.preference)
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.room.runtime)
@@ -270,6 +271,8 @@ dependencies {
     implementation(libs.google.exoplayer.mediasession)
     implementation(libs.google.exoplayer.smoothstreaming)
     implementation(libs.google.exoplayer.ui)
+    implementation(libs.google.exoplayer.cast)
+    implementation(libs.google.cast.framework)
 
     // Manager for complex RecyclerView layouts
     implementation(libs.lisawray.groupie.core)
