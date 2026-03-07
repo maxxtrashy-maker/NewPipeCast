@@ -52,6 +52,16 @@ configure<ApplicationExtension> {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    flavorDimensions += "variant"
+    productFlavors {
+        create("gms") {
+            dimension = "variant"
+        }
+        create("foss") {
+            dimension = "variant"
+        }
+    }
+
     buildTypes {
         debug {
             isDebuggable = true
@@ -198,7 +208,8 @@ tasks.register<CheckDependenciesOrder>("checkDependenciesOrder") {
 }
 
 afterEvaluate {
-    tasks.named("preDebugBuild").configure {
+    // With product flavors, debug build tasks are named pre<Flavor>DebugBuild
+    tasks.matching { it.name.matches(Regex("pre(Gms|Foss)DebugBuild")) }.configureEach {
         if (!System.getProperties().containsKey("skipFormatKtlint")) {
             dependsOn("formatKtlint")
         }
@@ -271,8 +282,9 @@ dependencies {
     implementation(libs.google.media3.datasource)
     implementation(libs.google.media3.session)
     implementation(libs.google.media3.ui)
-    implementation(libs.google.media3.cast)
-    implementation(libs.google.cast.framework)
+    // Cast support (GMS flavor only)
+    "gmsImplementation"(libs.google.media3.cast)
+    "gmsImplementation"(libs.google.cast.framework)
 
     // Manager for complex RecyclerView layouts
     implementation(libs.lisawray.groupie.core)

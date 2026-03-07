@@ -70,7 +70,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.PlaybackParameters;
-import androidx.media3.cast.SessionAvailabilityListener;
+
 import androidx.media3.common.Player.PositionInfo;
 import androidx.media3.common.Timeline;
 import androidx.media3.common.Tracks;
@@ -142,7 +142,7 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.disposables.SerialDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
-public final class Player implements PlaybackListener, Listener, SessionAvailabilityListener {
+public final class Player implements PlaybackListener, Listener, CastSessionCallback {
     public static final boolean DEBUG = MainActivity.DEBUG;
     public static final String TAG = Player.class.getSimpleName();
 

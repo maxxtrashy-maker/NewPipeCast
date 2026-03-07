@@ -59,7 +59,7 @@ import androidx.media3.common.text.Cue;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.CaptionStyleCompat;
 import androidx.media3.common.VideoSize;
-import com.google.android.gms.cast.framework.CastButtonFactory;
+import org.schabi.newpipe.player.CastPlayerManager;
 
 import org.schabi.newpipe.App;
 import org.schabi.newpipe.R;
@@ -193,7 +193,7 @@ public abstract class VideoPlayerUi extends PlayerUi implements SeekBar.OnSeekBa
         binding.titleTextView.setSelected(true);
         binding.channelTextView.setSelected(true);
 
-        CastButtonFactory.setUpMediaRouteButton(context, binding.mediaRouteButton);
+        CastPlayerManager.setupMediaRouteButton(context, binding.mediaRouteButton);
 
         // Prevent hiding of bottom sheet via swipe inside queue
         binding.itemsList.setNestedScrollingEnabled(false);

@@ -5,7 +5,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import org.junit.Test;
 import org.schabi.newpipe.extractor.MediaFormat;
@@ -22,8 +21,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void hlsUrlIsSelectedFirst() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         "https://example.com/hls.m3u8",
                         null, false,
                         List.of(progressiveVideoStream("720p")),
@@ -36,8 +35,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void hlsUrlIsSelectedOverProgressiveEvenForVod() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         "https://example.com/hls.m3u8",
                         null, false,
                         List.of(progressiveVideoStream("1080p")),
@@ -53,8 +52,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void dashUrlIsSelectedForLiveWhenNoHls() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null,
                         "https://example.com/dash.mpd",
                         true,
@@ -68,8 +67,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void dashUrlIsNotUsedForVod() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null,
                         "https://example.com/dash.mpd",
                         false,
@@ -85,8 +84,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void progressiveVideoWithAudioIsSelected() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         List.of(progressiveVideoStream("720p")),
                         null, -1);
@@ -98,8 +97,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void videoOnlyStreamsAreSkipped() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         List.of(videoOnlyStream("1080p"),
                                 progressiveVideoStream("360p")),
@@ -111,8 +110,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void nonProgressiveStreamsAreSkippedInStep3ButUsedInStep4() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         List.of(dashVideoStream("720p")),
                         null, -1);
@@ -123,8 +122,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void firstMatchingStreamIsSelected() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         List.of(progressiveVideoStream("720p"),
                                 progressiveVideoStream("360p")),
@@ -140,8 +139,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void audioOnlyIsUsedWhenNoVideoAvailable() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         Collections.emptyList(),
                         List.of(progressiveAudioStream()),
@@ -154,8 +153,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void audioOnlyIsNotUsedWhenVideoExists() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         List.of(progressiveVideoStream("360p")),
                         List.of(progressiveAudioStream()),
@@ -171,8 +170,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void returnsNullWhenNoStreamsAvailable() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         Collections.emptyList(),
                         null, -1);
@@ -182,8 +181,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void returnsNullWhenOnlyVideoOnlyStreams() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         null, null, false,
                         List.of(videoOnlyStream("1080p"),
                                 videoOnlyStream("720p")),
@@ -198,8 +197,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void hlsTakesPriorityOverDashForLive() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         "https://example.com/hls.m3u8",
                         "https://example.com/dash.mpd",
                         true,
@@ -212,8 +211,8 @@ public class CastStreamSelectionTest {
 
     @Test
     public void hlsTakesPriorityOverProgressiveVideo() {
-        final CastPlayerManager.CastStreamSelection result =
-                CastPlayerManager.selectCastStream(
+        final CastStreamSelector.CastStreamSelection result =
+                CastStreamSelector.selectCastStream(
                         "https://example.com/hls.m3u8",
                         null, false,
                         List.of(progressiveVideoStream("1080p")),
