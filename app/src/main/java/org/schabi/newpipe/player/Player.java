@@ -54,7 +54,6 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
-import android.net.Uri;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -71,9 +70,7 @@ import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.PlaybackException;
 import com.google.android.exoplayer2.PlaybackParameters;
-import com.google.android.exoplayer2.ext.cast.CastPlayer;
 import com.google.android.exoplayer2.ext.cast.SessionAvailabilityListener;
-import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.exoplayer2.Player.PositionInfo;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.Tracks;
@@ -95,7 +92,6 @@ import org.schabi.newpipe.error.ErrorUtil;
 import org.schabi.newpipe.error.UserAction;
 import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.stream.AudioStream;
-import org.schabi.newpipe.extractor.stream.DeliveryMethod;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.extractor.stream.StreamType;
 import org.schabi.newpipe.extractor.stream.VideoStream;
@@ -211,9 +207,9 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
     //////////////////////////////////////////////////////////////////////////*/
 
     private ExoPlayer simpleExoPlayer;
-    private CastPlayer castPlayer;
     private com.google.android.exoplayer2.Player currentPlayer;
-    private CastContext castContext;
+    @NonNull
+    private final CastPlayerManager castPlayerManager;
     private AudioReactor audioReactor;
 
     @NonNull
@@ -322,12 +318,7 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         videoResolver = new VideoPlaybackResolver(context, dataSource, getQualityResolver());
         audioResolver = new AudioPlaybackResolver(context, dataSource);
 
-        try {
-            castContext = CastContext.getSharedInstance(context);
-            castPlayer = new CastPlayer(castContext);
-        } catch (final Exception e) {
-            Log.e(TAG, "Failed to initialize CastContext", e);
-        }
+        castPlayerManager = new CastPlayerManager(context);
 
         currentThumbnailTarget = getCurrentThumbnailTarget();
 
@@ -656,15 +647,12 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         simpleExoPlayer.setWakeMode(C.WAKE_MODE_NETWORK);
         simpleExoPlayer.setHandleAudioBecomingNoisy(true);
 
-        if (castPlayer != null && castPlayer.isCastSessionAvailable()) {
-            currentPlayer = castPlayer;
+        if (castPlayerManager.isCastSessionAvailable()) {
+            currentPlayer = castPlayerManager.getCastPlayer();
         } else {
             currentPlayer = simpleExoPlayer;
         }
-        if (castPlayer != null) {
-            castPlayer.addListener(this);
-            castPlayer.setSessionAvailabilityListener(this);
-        }
+        castPlayerManager.initPlayer(this, this);
 
         audioReactor = new AudioReactor(context, simpleExoPlayer);
 
@@ -695,10 +683,7 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         }
         UIs.call(PlayerUi::destroyPlayer);
 
-        if (castPlayer != null) {
-            castPlayer.removeListener(this);
-            castPlayer.setSessionAvailabilityListener(null);
-        }
+        castPlayerManager.destroyPlayer(this);
 
         if (!exoPlayerIsNull()) {
             simpleExoPlayer.removeListener(this);
@@ -729,10 +714,7 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         stopActivityBinding();
 
         destroyPlayer();
-        if (castPlayer != null) {
-            castPlayer.release();
-            castPlayer = null;
-        }
+        castPlayerManager.release();
 
         unregisterBroadcastReceiver();
 
@@ -2541,7 +2523,11 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
 
     @Override
     public void onCastSessionAvailable() {
-        setCurrentPlayer(castPlayer);
+        final com.google.android.exoplayer2.Player castPlayer =
+                castPlayerManager.getCastPlayer();
+        if (castPlayer != null) {
+            setCurrentPlayer(castPlayer);
+        }
     }
 
     @Override
@@ -2568,8 +2554,11 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         currentPlayer = newPlayer;
 
         // Restore state to new player
-        if (newPlayer == castPlayer) {
-            loadMediaToCastPlayer(currentWindowIndex, currentPos, playWhenReady);
+        if (newPlayer == castPlayerManager.getCastPlayer()) {
+            if (playQueue != null) {
+                getCurrentStreamInfo().ifPresent(info ->
+                        castPlayerManager.loadMedia(context, info, currentPos, playWhenReady));
+            }
         } else {
             reloadPlayQueueManager();
             if (simpleExoPlayer.getDuration() != C.TIME_UNSET) {
@@ -2582,111 +2571,5 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         }
 
         UIs.call(PlayerUi::initPlayer);
-    }
-
-    private void loadMediaToCastPlayer(final int windowIndex, final long positionMs,
-                                       final boolean playWhenReady) {
-        if (playQueue == null || castPlayer == null) {
-            return;
-        }
-
-        getCurrentStreamInfo().ifPresent(info -> {
-            String url = null;
-            String mimeType = null;
-
-            // 1. For live streams, use HLS/DASH manifest URLs
-            if (StreamTypeUtil.isLiveStream(info.getStreamType())) {
-                if (!isNullOrEmpty(info.getHlsUrl())) {
-                    url = info.getHlsUrl();
-                    mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_M3U8;
-                } else if (!isNullOrEmpty(info.getDashMpdUrl())) {
-                    url = info.getDashMpdUrl();
-                    mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_MPD;
-                }
-            }
-
-            // 2. Try progressive video streams with audio (best Cast compatibility)
-            if (url == null) {
-                final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
-                        context, info.getVideoStreams(), null, false, false);
-                for (final VideoStream stream : sortedStreams) {
-                    if (!stream.isVideoOnly()
-                            && stream.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP
-                            && stream.isUrl()) {
-                        url = stream.getContent();
-                        if (stream.getFormat() != null) {
-                            mimeType = stream.getFormat().getMimeType();
-                        }
-                        if (DEBUG) {
-                            Log.d(TAG, "Cast: selected video stream "
-                                    + stream.getResolution() + " " + mimeType);
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // 3. Try any non-video-only stream regardless of delivery method
-            if (url == null) {
-                final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
-                        context, info.getVideoStreams(), null, false, false);
-                for (final VideoStream stream : sortedStreams) {
-                    if (!stream.isVideoOnly() && stream.isUrl()) {
-                        url = stream.getContent();
-                        if (stream.getFormat() != null) {
-                            mimeType = stream.getFormat().getMimeType();
-                        }
-                        if (DEBUG) {
-                            Log.d(TAG, "Cast: fallback video stream "
-                                    + stream.getResolution() + " " + mimeType);
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // 4. Try audio-only streams (music, podcasts, or when no video+audio exists)
-            if (url == null && !isNullOrEmpty(info.getAudioStreams())) {
-                final List<AudioStream> audioStreams = info.getAudioStreams();
-                final int audioIndex = ListHelper.getAudioFormatIndex(
-                        context, audioStreams, null);
-                final int idx = audioIndex >= 0 ? audioIndex : 0;
-                if (idx < audioStreams.size()) {
-                    final AudioStream audio = audioStreams.get(idx);
-                    if (audio.isUrl()
-                            && audio.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP) {
-                        url = audio.getContent();
-                        if (audio.getFormat() != null) {
-                            mimeType = audio.getFormat().getMimeType();
-                        }
-                        if (DEBUG) {
-                            Log.d(TAG, "Cast: using audio-only stream " + mimeType);
-                        }
-                    }
-                }
-            }
-
-            if (url != null) {
-                final com.google.android.exoplayer2.MediaItem mediaItem =
-                        org.schabi.newpipe.player.mediaitem.StreamInfoTag.of(info)
-                                .asMediaItem()
-                                .buildUpon()
-                                .setUri(Uri.parse(url))
-                                .setMimeType(mimeType)
-                                .build();
-
-                castPlayer.setMediaItem(mediaItem, positionMs);
-                castPlayer.setPlayWhenReady(playWhenReady);
-                castPlayer.prepare();
-            } else {
-                Log.e(TAG, "Cast: no castable stream found for " + info.getUrl());
-                ErrorUtil.createNotification(context, new ErrorInfo(
-                        new Exception("No castable stream found"),
-                        UserAction.PLAY_STREAM,
-                        "No castable stream found for: " + info.getName(),
-                        info.getServiceId(),
-                        info.getUrl()));
-            }
-        });
     }
 }
