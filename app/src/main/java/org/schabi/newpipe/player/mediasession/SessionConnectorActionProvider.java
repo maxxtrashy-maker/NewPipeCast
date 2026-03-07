@@ -8,8 +8,7 @@ import android.support.v4.media.session.PlaybackStateCompat;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.android.exoplayer2.Player;
-import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector;
+import androidx.media3.common.Player;
 
 import org.schabi.newpipe.player.notification.NotificationActionData;
 

@@ -9,9 +9,9 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.android.exoplayer2.ext.cast.CastPlayer;
-import com.google.android.exoplayer2.ext.cast.SessionAvailabilityListener;
-import com.google.android.exoplayer2.util.MimeTypes;
+import androidx.media3.cast.CastPlayer;
+import androidx.media3.cast.SessionAvailabilityListener;
+import androidx.media3.common.MimeTypes;
 import com.google.android.gms.cast.framework.CastContext;
 
 import org.schabi.newpipe.error.ErrorInfo;
@@ -61,7 +61,7 @@ public final class CastPlayerManager {
      * @param sessionListener the Cast session availability listener
      */
     public void initPlayer(
-            @NonNull final com.google.android.exoplayer2.Player.Listener listener,
+            @NonNull final androidx.media3.common.Player.Listener listener,
             @NonNull final SessionAvailabilityListener sessionListener) {
         if (castPlayer != null) {
             castPlayer.addListener(listener);
@@ -76,7 +76,7 @@ public final class CastPlayerManager {
      * @param listener the playback event listener to remove
      */
     public void destroyPlayer(
-            @NonNull final com.google.android.exoplayer2.Player.Listener listener) {
+            @NonNull final androidx.media3.common.Player.Listener listener) {
         if (castPlayer != null) {
             castPlayer.removeListener(listener);
             castPlayer.setSessionAvailabilityListener(null);
@@ -222,7 +222,7 @@ public final class CastPlayerManager {
         }
 
         if (url != null) {
-            final com.google.android.exoplayer2.MediaItem mediaItem =
+            final androidx.media3.common.MediaItem mediaItem =
                     StreamInfoTag.of(info)
                             .asMediaItem()
                             .buildUpon()

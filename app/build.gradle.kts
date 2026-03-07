@@ -262,16 +262,16 @@ dependencies {
     // HTTP client
     implementation(libs.squareup.okhttp)
 
-    // Media player
-    implementation(libs.google.exoplayer.core)
-    implementation(libs.google.exoplayer.dash)
-    implementation(libs.google.exoplayer.database)
-    implementation(libs.google.exoplayer.datasource)
-    implementation(libs.google.exoplayer.hls)
-    implementation(libs.google.exoplayer.mediasession)
-    implementation(libs.google.exoplayer.smoothstreaming)
-    implementation(libs.google.exoplayer.ui)
-    implementation(libs.google.exoplayer.cast)
+    // Media player (AndroidX Media3)
+    implementation(libs.google.media3.common)
+    implementation(libs.google.media3.exoplayer)
+    implementation(libs.google.media3.exoplayer.dash)
+    implementation(libs.google.media3.exoplayer.hls)
+    implementation(libs.google.media3.exoplayer.smoothstreaming)
+    implementation(libs.google.media3.datasource)
+    implementation(libs.google.media3.session)
+    implementation(libs.google.media3.ui)
+    implementation(libs.google.media3.cast)
     implementation(libs.google.cast.framework)
 
     // Manager for complex RecyclerView layouts

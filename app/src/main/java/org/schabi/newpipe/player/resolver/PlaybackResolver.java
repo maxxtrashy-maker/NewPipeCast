@@ -9,17 +9,17 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
-import com.google.android.exoplayer2.C;
-import com.google.android.exoplayer2.MediaItem;
-import com.google.android.exoplayer2.source.MediaSource;
-import com.google.android.exoplayer2.source.ProgressiveMediaSource;
-import com.google.android.exoplayer2.source.dash.DashMediaSource;
-import com.google.android.exoplayer2.source.dash.manifest.DashManifest;
-import com.google.android.exoplayer2.source.dash.manifest.DashManifestParser;
-import com.google.android.exoplayer2.source.hls.HlsMediaSource;
-import com.google.android.exoplayer2.source.smoothstreaming.SsMediaSource;
-import com.google.android.exoplayer2.source.smoothstreaming.manifest.SsManifest;
-import com.google.android.exoplayer2.source.smoothstreaming.manifest.SsManifestParser;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.ProgressiveMediaSource;
+import androidx.media3.exoplayer.dash.DashMediaSource;
+import androidx.media3.exoplayer.dash.manifest.DashManifest;
+import androidx.media3.exoplayer.dash.manifest.DashManifestParser;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.smoothstreaming.SsMediaSource;
+import androidx.media3.exoplayer.smoothstreaming.manifest.SsManifest;
+import androidx.media3.exoplayer.smoothstreaming.manifest.SsManifestParser;
 
 import org.schabi.newpipe.extractor.MediaFormat;
 import org.schabi.newpipe.extractor.ServiceList;
@@ -559,10 +559,10 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         }
     }
 
-    private static com.google.android.exoplayer2.MediaMetadata getMediaMetadata(
+    private static androidx.media3.common.MediaMetadata getMediaMetadata(
             final MediaItemTag tag) {
         final String thumbnailUrl = tag.getThumbnailUrl();
-        return new com.google.android.exoplayer2.MediaMetadata.Builder()
+        return new androidx.media3.common.MediaMetadata.Builder()
                 .setArtworkUri(thumbnailUrl == null ? null : Uri.parse(thumbnailUrl))
                 .setArtist(tag.getUploaderName())
                 .setDescription(tag.getTitle())

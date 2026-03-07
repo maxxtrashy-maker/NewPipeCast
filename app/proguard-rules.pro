@@ -22,8 +22,8 @@
 # See https://github.com/jhy/jsoup/issues/2459 - may be resolved in future, then this may be removed
 -dontwarn com.google.re2j.**
 
-## Rules for ExoPlayer
--keep class com.google.android.exoplayer2.** { *; }
+## Rules for AndroidX Media3
+-keep class androidx.media3.** { *; }
 
 ## Rules for OkHttp. Copy pasted from https://github.com/square/okhttp
 -dontwarn okhttp3.**
