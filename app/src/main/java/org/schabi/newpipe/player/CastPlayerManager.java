@@ -116,8 +116,9 @@ public final class CastPlayerManager {
      * <p>
      * Stream selection follows this priority:
      * <ol>
-     *   <li>Live streams: HLS or DASH manifest URLs</li>
-     *   <li>Progressive HTTP video streams with audio (best Cast compatibility)</li>
+     *   <li>HLS manifest URL (adaptive streaming, best quality on Cast)</li>
+     *   <li>DASH manifest URL (live streams only)</li>
+     *   <li>Progressive HTTP video streams with audio</li>
      *   <li>Any non-video-only stream accessible by URL</li>
      *   <li>Audio-only progressive streams (music, podcasts)</li>
      * </ol>
@@ -138,18 +139,28 @@ public final class CastPlayerManager {
         String url = null;
         String mimeType = null;
 
-        // 1. For live streams, use HLS/DASH manifest URLs
-        if (StreamTypeUtil.isLiveStream(info.getStreamType())) {
-            if (!isNullOrEmpty(info.getHlsUrl())) {
-                url = info.getHlsUrl();
-                mimeType = MimeTypes.APPLICATION_M3U8;
-            } else if (!isNullOrEmpty(info.getDashMpdUrl())) {
-                url = info.getDashMpdUrl();
-                mimeType = MimeTypes.APPLICATION_MPD;
+        // 1. Try HLS manifest URL (works for both live and VOD on Chromecast)
+        //    HLS adaptive streaming lets the Chromecast pick the best resolution
+        //    (up to 1080p) instead of being limited to low-res progressive streams.
+        if (!isNullOrEmpty(info.getHlsUrl())) {
+            url = info.getHlsUrl();
+            mimeType = MimeTypes.APPLICATION_M3U8;
+            if (DEBUG) {
+                Log.d(TAG, "Cast: using HLS manifest URL");
             }
         }
 
-        // 2. Try progressive video streams with audio (best Cast compatibility)
+        // 2. For live streams, also try DASH manifest
+        if (url == null && StreamTypeUtil.isLiveStream(info.getStreamType())
+                && !isNullOrEmpty(info.getDashMpdUrl())) {
+            url = info.getDashMpdUrl();
+            mimeType = MimeTypes.APPLICATION_MPD;
+            if (DEBUG) {
+                Log.d(TAG, "Cast: using DASH manifest URL (live)");
+            }
+        }
+
+        // 3. Try progressive video streams with audio
         if (url == null) {
             final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
                     context, info.getVideoStreams(), null, false, false);
@@ -170,7 +181,7 @@ public final class CastPlayerManager {
             }
         }
 
-        // 3. Try any non-video-only stream regardless of delivery method
+        // 4. Try any non-video-only stream regardless of delivery method
         if (url == null) {
             final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
                     context, info.getVideoStreams(), null, false, false);
@@ -189,7 +200,7 @@ public final class CastPlayerManager {
             }
         }
 
-        // 4. Try audio-only streams (music, podcasts, or when no video+audio exists)
+        // 5. Try audio-only streams (music, podcasts, or when no video+audio exists)
         if (url == null && !isNullOrEmpty(info.getAudioStreams())) {
             final List<AudioStream> audioStreams = info.getAudioStreams();
             final int audioIndex = ListHelper.getAudioFormatIndex(

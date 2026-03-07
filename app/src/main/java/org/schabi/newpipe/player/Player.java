@@ -732,8 +732,8 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         }
 
         final int queuePos = playQueue.getIndex();
-        final long windowPos = simpleExoPlayer.getCurrentPosition();
-        final long duration = simpleExoPlayer.getDuration();
+        final long windowPos = currentPlayer.getCurrentPosition();
+        final long duration = currentPlayer.getDuration();
 
         // No checks due to https://github.com/TeamNewPipe/NewPipe/pull/7195#issuecomment-962624380
         setRecovery(queuePos, MathUtils.clamp(windowPos, 0, duration));
@@ -1054,8 +1054,8 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
             return;
         }
 
-        onUpdateProgress(Math.max((int) simpleExoPlayer.getCurrentPosition(), 0),
-                (int) simpleExoPlayer.getDuration(), simpleExoPlayer.getBufferedPercentage());
+        onUpdateProgress(Math.max((int) currentPlayer.getCurrentPosition(), 0),
+                (int) currentPlayer.getDuration(), currentPlayer.getBufferedPercentage());
     }
 
     private Disposable getProgressUpdateDisposable() {
@@ -1082,7 +1082,7 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         }
         final int playbackState = exoPlayerIsNull()
                 ? com.google.android.exoplayer2.Player.STATE_IDLE
-                : simpleExoPlayer.getPlaybackState();
+                : currentPlayer.getPlaybackState();
         updatePlaybackState(playWhenReady, playbackState);
     }
 
@@ -1654,8 +1654,8 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
             return false;
         }
 
-        final long currentPositionMillis = simpleExoPlayer.getCurrentPosition();
-        final long currentDurationMillis = simpleExoPlayer.getDuration();
+        final long currentPositionMillis = currentPlayer.getCurrentPosition();
+        final long currentDurationMillis = currentPlayer.getDuration();
         return currentDurationMillis - currentPositionMillis < timeToEndMillis;
     }
 
@@ -1679,7 +1679,7 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
 
         final Timeline.Window timelineWindow = new Timeline.Window();
         currentTimeline.getWindow(currentWindowIndex, timelineWindow);
-        return timelineWindow.getDefaultPositionMs() <= simpleExoPlayer.getCurrentPosition();
+        return timelineWindow.getDefaultPositionMs() <= currentPlayer.getCurrentPosition();
     }
 
     @Override // own playback listener
@@ -1742,8 +1742,8 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         }
         if (!exoPlayerIsNull()) {
             // prevent invalid positions when fast-forwarding/-rewinding
-            simpleExoPlayer.seekTo(MathUtils.clamp(positionMillis, 0,
-                    simpleExoPlayer.getDuration()));
+            currentPlayer.seekTo(MathUtils.clamp(positionMillis, 0,
+                    currentPlayer.getDuration()));
         }
     }
 
@@ -1751,12 +1751,12 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         if (DEBUG) {
             Log.d(TAG, "seekBy() called with: offsetMillis = [" + offsetMillis + "]");
         }
-        seekTo(simpleExoPlayer.getCurrentPosition() + offsetMillis);
+        seekTo(currentPlayer.getCurrentPosition() + offsetMillis);
     }
 
     public void seekToDefault() {
         if (!exoPlayerIsNull()) {
-            simpleExoPlayer.seekToDefaultPosition();
+            currentPlayer.seekToDefaultPosition();
         }
     }
     //endregion
@@ -1830,7 +1830,7 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         /* If current playback has run for PLAY_PREV_ACTIVATION_LIMIT_MILLIS milliseconds,
          * restart current track. Also restart the track if the current track
          * is the first in a queue.*/
-        if (simpleExoPlayer.getCurrentPosition() > PLAY_PREV_ACTIVATION_LIMIT_MILLIS
+        if (currentPlayer.getCurrentPosition() > PLAY_PREV_ACTIVATION_LIMIT_MILLIS
                 || playQueue.getIndex() == 0) {
             seekToDefault();
             playQueue.offsetIndex(0);
@@ -1915,8 +1915,8 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
         }
         // Save current position. It will help to restore this position once a user
         // wants to play prev or next stream from the queue
-        playQueue.setRecovery(playQueue.getIndex(), simpleExoPlayer.getContentPosition());
-        saveStreamProgressState(simpleExoPlayer.getCurrentPosition());
+        playQueue.setRecovery(playQueue.getIndex(), currentPlayer.getContentPosition());
+        saveStreamProgressState(currentPlayer.getCurrentPosition());
     }
 
     public void saveStreamProgressStateCompleted() {
@@ -1960,7 +1960,7 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
 
     @NonNull
     public String getVideoUrlAtCurrentTime() {
-        final long timeSeconds = simpleExoPlayer.getCurrentPosition() / 1000;
+        final long timeSeconds = currentPlayer.getCurrentPosition() / 1000;
         String videoUrl = getVideoUrl();
         if (!isLive() && timeSeconds >= 0 && currentMetadata != null
                 && currentMetadata.getServiceId() == YouTube.getServiceId()) {
