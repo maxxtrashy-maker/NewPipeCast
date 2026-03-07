@@ -31,6 +31,7 @@ import java.util.List;
  * Manages the Google Cast (Chromecast) player lifecycle and media loading.
  * Extracted from {@link Player} to separate Cast-specific concerns.
  */
+@SuppressWarnings("WeakerAccess") // package-visible methods for testing
 public final class CastPlayerManager {
     private static final String TAG = CastPlayerManager.class.getSimpleName();
     private static final boolean DEBUG = Player.DEBUG;
@@ -108,6 +109,91 @@ public final class CastPlayerManager {
     }
 
     /*//////////////////////////////////////////////////////////////////////////
+    // Stream selection (package-visible for testing)
+    //////////////////////////////////////////////////////////////////////////*/
+
+    /**
+     * Holds the result of Cast stream selection.
+     */
+    static final class CastStreamSelection {
+        final String url;
+        final String mimeType;
+
+        CastStreamSelection(@NonNull final String url, @Nullable final String mimeType) {
+            this.url = url;
+            this.mimeType = mimeType;
+        }
+    }
+
+    /**
+     * Selects the best Cast-compatible stream from the given parameters.
+     * This method is pure (no side effects) and testable without Android context.
+     *
+     * @param hlsUrl         HLS manifest URL (may be null)
+     * @param dashMpdUrl     DASH MPD URL (may be null)
+     * @param isLive         whether the stream is live
+     * @param videoStreams    sorted video streams (highest quality first)
+     * @param audioStreams    audio streams
+     * @param audioIndex     preferred audio stream index (-1 if none)
+     * @return the selected stream, or null if none found
+     */
+    @Nullable
+    static CastStreamSelection selectCastStream(
+            @Nullable final String hlsUrl,
+            @Nullable final String dashMpdUrl,
+            final boolean isLive,
+            @NonNull final List<VideoStream> videoStreams,
+            @Nullable final List<AudioStream> audioStreams,
+            final int audioIndex) {
+
+        // 1. HLS manifest (adaptive, best quality)
+        if (!isNullOrEmpty(hlsUrl)) {
+            return new CastStreamSelection(hlsUrl, MimeTypes.APPLICATION_M3U8);
+        }
+
+        // 2. DASH manifest (live only)
+        if (isLive && !isNullOrEmpty(dashMpdUrl)) {
+            return new CastStreamSelection(dashMpdUrl, MimeTypes.APPLICATION_MPD);
+        }
+
+        // 3. Progressive video+audio
+        for (final VideoStream stream : videoStreams) {
+            if (!stream.isVideoOnly()
+                    && stream.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP
+                    && stream.isUrl()) {
+                return new CastStreamSelection(stream.getContent(),
+                        stream.getFormat() != null
+                                ? stream.getFormat().getMimeType() : null);
+            }
+        }
+
+        // 4. Any non-video-only stream with URL
+        for (final VideoStream stream : videoStreams) {
+            if (!stream.isVideoOnly() && stream.isUrl()) {
+                return new CastStreamSelection(stream.getContent(),
+                        stream.getFormat() != null
+                                ? stream.getFormat().getMimeType() : null);
+            }
+        }
+
+        // 5. Audio-only progressive
+        if (!isNullOrEmpty(audioStreams)) {
+            final int idx = audioIndex >= 0 ? audioIndex : 0;
+            if (idx < audioStreams.size()) {
+                final AudioStream audio = audioStreams.get(idx);
+                if (audio.isUrl()
+                        && audio.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP) {
+                    return new CastStreamSelection(audio.getContent(),
+                            audio.getFormat() != null
+                                    ? audio.getFormat().getMimeType() : null);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /*//////////////////////////////////////////////////////////////////////////
     // Media loading
     //////////////////////////////////////////////////////////////////////////*/
 
@@ -136,98 +222,32 @@ public final class CastPlayerManager {
             return;
         }
 
-        String url = null;
-        String mimeType = null;
+        final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
+                context, info.getVideoStreams(), null, false, false);
+        final List<AudioStream> audioStreams = info.getAudioStreams();
+        final int audioIndex = isNullOrEmpty(audioStreams) ? -1
+                : ListHelper.getAudioFormatIndex(context, audioStreams, null);
 
-        // 1. Try HLS manifest URL (works for both live and VOD on Chromecast)
-        //    HLS adaptive streaming lets the Chromecast pick the best resolution
-        //    (up to 1080p) instead of being limited to low-res progressive streams.
-        if (!isNullOrEmpty(info.getHlsUrl())) {
-            url = info.getHlsUrl();
-            mimeType = MimeTypes.APPLICATION_M3U8;
-            if (DEBUG) {
-                Log.d(TAG, "Cast: using HLS manifest URL");
-            }
+        final CastStreamSelection selection = selectCastStream(
+                info.getHlsUrl(),
+                info.getDashMpdUrl(),
+                StreamTypeUtil.isLiveStream(info.getStreamType()),
+                sortedStreams,
+                audioStreams,
+                audioIndex);
+
+        if (DEBUG && selection != null) {
+            Log.d(TAG, "Cast: selected stream url=" + selection.url
+                    + " mimeType=" + selection.mimeType);
         }
 
-        // 2. For live streams, also try DASH manifest
-        if (url == null && StreamTypeUtil.isLiveStream(info.getStreamType())
-                && !isNullOrEmpty(info.getDashMpdUrl())) {
-            url = info.getDashMpdUrl();
-            mimeType = MimeTypes.APPLICATION_MPD;
-            if (DEBUG) {
-                Log.d(TAG, "Cast: using DASH manifest URL (live)");
-            }
-        }
-
-        // 3. Try progressive video streams with audio
-        if (url == null) {
-            final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
-                    context, info.getVideoStreams(), null, false, false);
-            for (final VideoStream stream : sortedStreams) {
-                if (!stream.isVideoOnly()
-                        && stream.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP
-                        && stream.isUrl()) {
-                    url = stream.getContent();
-                    if (stream.getFormat() != null) {
-                        mimeType = stream.getFormat().getMimeType();
-                    }
-                    if (DEBUG) {
-                        Log.d(TAG, "Cast: selected video stream "
-                                + stream.getResolution() + " " + mimeType);
-                    }
-                    break;
-                }
-            }
-        }
-
-        // 4. Try any non-video-only stream regardless of delivery method
-        if (url == null) {
-            final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
-                    context, info.getVideoStreams(), null, false, false);
-            for (final VideoStream stream : sortedStreams) {
-                if (!stream.isVideoOnly() && stream.isUrl()) {
-                    url = stream.getContent();
-                    if (stream.getFormat() != null) {
-                        mimeType = stream.getFormat().getMimeType();
-                    }
-                    if (DEBUG) {
-                        Log.d(TAG, "Cast: fallback video stream "
-                                + stream.getResolution() + " " + mimeType);
-                    }
-                    break;
-                }
-            }
-        }
-
-        // 5. Try audio-only streams (music, podcasts, or when no video+audio exists)
-        if (url == null && !isNullOrEmpty(info.getAudioStreams())) {
-            final List<AudioStream> audioStreams = info.getAudioStreams();
-            final int audioIndex = ListHelper.getAudioFormatIndex(
-                    context, audioStreams, null);
-            final int idx = audioIndex >= 0 ? audioIndex : 0;
-            if (idx < audioStreams.size()) {
-                final AudioStream audio = audioStreams.get(idx);
-                if (audio.isUrl()
-                        && audio.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP) {
-                    url = audio.getContent();
-                    if (audio.getFormat() != null) {
-                        mimeType = audio.getFormat().getMimeType();
-                    }
-                    if (DEBUG) {
-                        Log.d(TAG, "Cast: using audio-only stream " + mimeType);
-                    }
-                }
-            }
-        }
-
-        if (url != null) {
+        if (selection != null) {
             final androidx.media3.common.MediaItem mediaItem =
                     StreamInfoTag.of(info)
                             .asMediaItem()
                             .buildUpon()
-                            .setUri(Uri.parse(url))
-                            .setMimeType(mimeType)
+                            .setUri(Uri.parse(selection.url))
+                            .setMimeType(selection.mimeType)
                             .build();
 
             castPlayer.setMediaItem(mediaItem, positionMs);
