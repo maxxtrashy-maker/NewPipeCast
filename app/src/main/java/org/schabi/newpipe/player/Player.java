@@ -95,6 +95,7 @@ import org.schabi.newpipe.error.ErrorUtil;
 import org.schabi.newpipe.error.UserAction;
 import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.stream.AudioStream;
+import org.schabi.newpipe.extractor.stream.DeliveryMethod;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.extractor.stream.StreamType;
 import org.schabi.newpipe.extractor.stream.VideoStream;
@@ -2593,22 +2594,74 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
             String url = null;
             String mimeType = null;
 
-            if (!isNullOrEmpty(info.getHlsUrl())) {
-                url = info.getHlsUrl();
-                mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_M3U8;
-            } else if (!isNullOrEmpty(info.getDashMpdUrl())) {
-                url = info.getDashMpdUrl();
-                mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_MPD;
-            } else {
+            // 1. For live streams, use HLS/DASH manifest URLs
+            if (StreamTypeUtil.isLiveStream(info.getStreamType())) {
+                if (!isNullOrEmpty(info.getHlsUrl())) {
+                    url = info.getHlsUrl();
+                    mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_M3U8;
+                } else if (!isNullOrEmpty(info.getDashMpdUrl())) {
+                    url = info.getDashMpdUrl();
+                    mimeType = com.google.android.exoplayer2.util.MimeTypes.APPLICATION_MPD;
+                }
+            }
+
+            // 2. Try progressive video streams with audio (best Cast compatibility)
+            if (url == null) {
                 final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
                         context, info.getVideoStreams(), null, false, false);
                 for (final VideoStream stream : sortedStreams) {
-                    if (!stream.isVideoOnly()) {
+                    if (!stream.isVideoOnly()
+                            && stream.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP
+                            && stream.isUrl()) {
                         url = stream.getContent();
                         if (stream.getFormat() != null) {
                             mimeType = stream.getFormat().getMimeType();
                         }
+                        if (DEBUG) {
+                            Log.d(TAG, "Cast: selected video stream "
+                                    + stream.getResolution() + " " + mimeType);
+                        }
                         break;
+                    }
+                }
+            }
+
+            // 3. Try any non-video-only stream regardless of delivery method
+            if (url == null) {
+                final List<VideoStream> sortedStreams = ListHelper.getSortedStreamVideosList(
+                        context, info.getVideoStreams(), null, false, false);
+                for (final VideoStream stream : sortedStreams) {
+                    if (!stream.isVideoOnly() && stream.isUrl()) {
+                        url = stream.getContent();
+                        if (stream.getFormat() != null) {
+                            mimeType = stream.getFormat().getMimeType();
+                        }
+                        if (DEBUG) {
+                            Log.d(TAG, "Cast: fallback video stream "
+                                    + stream.getResolution() + " " + mimeType);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 4. Try audio-only streams (music, podcasts, or when no video+audio exists)
+            if (url == null && !isNullOrEmpty(info.getAudioStreams())) {
+                final List<AudioStream> audioStreams = info.getAudioStreams();
+                final int audioIndex = ListHelper.getAudioFormatIndex(
+                        context, audioStreams, null);
+                final int idx = audioIndex >= 0 ? audioIndex : 0;
+                if (idx < audioStreams.size()) {
+                    final AudioStream audio = audioStreams.get(idx);
+                    if (audio.isUrl()
+                            && audio.getDeliveryMethod() == DeliveryMethod.PROGRESSIVE_HTTP) {
+                        url = audio.getContent();
+                        if (audio.getFormat() != null) {
+                            mimeType = audio.getFormat().getMimeType();
+                        }
+                        if (DEBUG) {
+                            Log.d(TAG, "Cast: using audio-only stream " + mimeType);
+                        }
                     }
                 }
             }
@@ -2626,10 +2679,11 @@ public final class Player implements PlaybackListener, Listener, SessionAvailabi
                 castPlayer.setPlayWhenReady(playWhenReady);
                 castPlayer.prepare();
             } else {
+                Log.e(TAG, "Cast: no castable stream found for " + info.getUrl());
                 ErrorUtil.createNotification(context, new ErrorInfo(
                         new Exception("No castable stream found"),
                         UserAction.PLAY_STREAM,
-                        "No castable stream found",
+                        "No castable stream found for: " + info.getName(),
                         info.getServiceId(),
                         info.getUrl()));
             }
